@@ -20,12 +20,16 @@ WORDS_FN = 'sowpods.txt'
 def main():
     (opts, args) = getopts()
     words = Words(WORDS_FN)
-    tiles = sorted(Tiles.from_str(a) for a in args)
+    tiles = sorted(Tile.from_str(a) for a in args)
     print Wordiest.find_two_best(words, tiles)
+    if opts.spin:
+        while True:
+            pass
 
 def getopts():
     parser = optparse.OptionParser()
     parser.add_option('--verbose',  action='store_true')
+    parser.add_option('--spin',  action='store_true')
     (opts, args) = parser.parse_args()
     if opts.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -255,6 +259,10 @@ class Wordiest(object):
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
-    main()
-
+    try:
+        main()
+    except Exception as e:
+        print e
+        while True:
+            pass
 # --------------------------------------------------------------------------- #
