@@ -1,5 +1,25 @@
 #!/usr/bin/env python
 """
+A script that solves
+
+https://play.google.com/store/apps/details?id=com.concreterose.wordiest
+
+$ python solver.py --spin m i s2l o3w g3w y n t r2l a4l e n e n
+(214, 'ornamenting', 'yes', [])
+$ python solver.py --spin o2l d4w a e m e3w o2l e i k h f e2l g
+(237, 'geekdom', 'foh', [Tile(letter = 'a',
+     word_mult = 1,
+     letter_mult = 1,
+     value = 1), Tile(letter = 'e',
+     word_mult = 1,
+     letter_mult = 1,
+     value = 1), Tile(letter = 'e',
+     word_mult = 1,
+     letter_mult = 1,
+     value = 1), Tile(letter = 'i',
+     word_mult = 1,
+     letter_mult = 1,
+     value = 1)])
 """
 
 # --------------------------------------------------------------------------- #
@@ -13,13 +33,17 @@ logging.basicConfig(format='[%(asctime)s '
                     '%(funcName)s:%(lineno)s %(levelname)-5s] '
                     '%(message)s')
 
-WORDS_FN = 'sowpods.txt'
+SOWPODS_FN = 'sowpods.txt'
+WORDS_FN = 'twl06.txt'
 
 # --------------------------------------------------------------------------- #
 
 def main():
     (opts, args) = getopts()
-    words = Words(WORDS_FN)
+    if opts.sowpods:
+        words = Words(SOWPODS_FN)
+    else:
+        words = Words(WORDS_FN)
     tiles = sorted(Tile.from_str(a) for a in args)
     print Wordiest.find_two_best(words, tiles)
     if opts.spin:
@@ -30,6 +54,7 @@ def getopts():
     parser = optparse.OptionParser()
     parser.add_option('--verbose',  action='store_true')
     parser.add_option('--spin',  action='store_true')
+    parser.add_option('--sowpods',  action='store_true')
     (opts, args) = parser.parse_args()
     if opts.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
