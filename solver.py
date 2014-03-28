@@ -159,7 +159,7 @@ class Tile(FieldMixin):
         'r': 1,
         's': 1,
         't': 1,
-        'u': 1,
+        'u': 2,
         'v': 4,
         'w': 4,
         'x': 8,
