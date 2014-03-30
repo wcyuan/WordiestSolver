@@ -35,18 +35,24 @@ logging.basicConfig(format='[%(asctime)s '
 
 SOWPODS_FN = 'sowpods.txt'
 WORDS_FN = 'twl06.txt'
+DEFAULT_TOPN = 10
 
 # --------------------------------------------------------------------------- #
 
 def main():
     (opts, args) = getopts()
-    if opts.sowpods:
-        words = Words(SOWPODS_FN)
+    if opts.test:
+        test()
     else:
-        words = Words(WORDS_FN)
-    tiles = sorted(Tile.from_str(a) for a in args)
-    print Wordiest.find_two_best(words, tiles)
+        if opts.sowpods:
+            words = Words(SOWPODS_FN)
+        else:
+            words = Words(WORDS_FN)
+        tiles = sorted(Tile.from_str(a) for a in args)
+        for data in Wordiest.find_two_best(words, tiles, opts.topn):
+            print data
     if opts.spin:
+        print "Control-C to exit"
         while True:
             pass
 
@@ -55,6 +61,8 @@ def getopts():
     parser.add_option('--verbose',  action='store_true')
     parser.add_option('--spin',  action='store_true')
     parser.add_option('--sowpods',  action='store_true')
+    parser.add_option('--test',  action='store_true')
+    parser.add_option('-n', '--topn',  type=int, default=DEFAULT_TOPN)
     (opts, args) = parser.parse_args()
     if opts.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -209,6 +217,57 @@ class Tile(FieldMixin):
 
 # --------------------------------------------------------------------------- #
 
+class TopNQueue(object):
+    def __init__(self, topn=DEFAULT_TOPN, by_value=False):
+        self.topn = topn
+        self.by_value = by_value
+        self.data = []
+
+    def insert(self, value, data):
+        """
+        >>> topn = TopNQueue(by_value=True)
+        >>> topn.insert(3, 'asdf')
+        >>> topn.insert(5, 'five')
+        >>> topn.insert(5, 'cinq')
+        >>> topn.data
+        [(5, ['five', 'cinq']), (3, ['asdf'])]
+        >>> topn = TopNQueue()
+        >>> topn.insert(3, 'asdf')
+        >>> topn.insert(5, 'five')
+        >>> topn.insert(5, 'cinq')
+        >>> topn.data
+        [(5, 'cinq'), (5, 'five'), (3, 'asdf')]
+        """
+        ii = 0
+        length = len(self.data)
+        while ii < length and value < self.data[ii][0]:
+            ii += 1
+        if ii >= self.topn:
+            return
+        if self.by_value:
+            if ii < length and self.data[ii][0] == value:
+                self.data[ii][1].append(data)
+            else:
+                self.data.insert(ii, (value, [data]))
+        else:
+            self.data.insert(ii, (value, data))
+        if len(self.data) > self.topn:
+            self.data = self.data[:self.topn]
+
+    def __iter__(self):
+        if self.by_value:
+            for (value, data_list) in self.data:
+                for data in data_list:
+                    yield (value, data)
+        else:
+            for d in self.data:
+                yield d
+
+    def __getitem__(self, ii):
+        return self.data[ii]
+
+# --------------------------------------------------------------------------- #
+
 class Wordiest(object):
     @classmethod
     def make_tiles(cls, strings):
@@ -258,28 +317,32 @@ class Wordiest(object):
         return raw
 
     @classmethod
-    def find_best(cls, words, tiles):
-        best_score = 0
-        best_words = []
+    def find_best(cls, words, tiles, topn=DEFAULT_TOPN):
+        best = TopNQueue(topn)
         for (word, used, remaining) in cls.subset(words, tiles):
             score = cls.score(used)
             logging.debug("%s %s", word, score)
-            if score > best_score:
-                best_score = score
-                best_words = [(word, remaining)]
-            elif score == best_score:
-                best_words.append((word, remaining))
-        return (best_score, best_words)
+            best.insert(score, (word, remaining))
+        return best
 
     @classmethod
-    def find_two_best(cls, words, tiles):
-        (best_score, best_words) = cls.find_best(words, tiles)
-        (word, remaining) = best_words[0]
-        (next_score, next_words) = cls.find_best(words, remaining)
-        return (best_score+next_score,
-                words.get_words(word)[0],
-                words.get_words(next_words[0][0])[0],
-                next_words[0][1])
+    def find_two_best(cls, words, tiles, topn=DEFAULT_TOPN):
+        best = cls.find_best(words, tiles, topn)
+        for (score, data) in best:
+            (word, remaining) = data
+            next_best = cls.find_best(words, remaining, topn=1)
+            (next_score, next_word_data) = next_best[0]
+            (next_word, next_remaining) = next_word_data
+            yield (score+next_score,
+                   words.get_words(word),
+                   words.get_words(next_word),
+                   next_remaining)
+
+# --------------------------------------------------------------------------- #
+
+def test():
+    import doctest
+    doctest.testmod(verbose=True)
 
 # --------------------------------------------------------------------------- #
 
@@ -287,7 +350,9 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print e
+        import traceback
+        traceback.print_exc()
         while True:
             pass
+
 # --------------------------------------------------------------------------- #
