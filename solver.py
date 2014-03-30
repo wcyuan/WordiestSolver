@@ -330,13 +330,13 @@ class Wordiest(object):
         best = cls.find_best(words, tiles, topn)
         for (score, data) in best:
             (word, remaining) = data
-            next_best = cls.find_best(words, remaining, topn=1)
-            (next_score, next_word_data) = next_best[0]
-            (next_word, next_remaining) = next_word_data
-            yield (score+next_score,
-                   words.get_words(word),
-                   words.get_words(next_word),
-                   next_remaining)
+            next_best = cls.find_best(words, remaining, topn=2)
+            for (next_score, next_data) in next_best:
+                (next_word, next_remaining) = next_data
+                yield (score+next_score,
+                       words.get_words(word),
+                       words.get_words(next_word),
+                       ''.join(r.letter for r in next_remaining))
 
 # --------------------------------------------------------------------------- #
 
