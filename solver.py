@@ -26,12 +26,18 @@ $ python solver.py --spin o2l d4w a e m e3w o2l e i k h f e2l g
 
 from __future__ import absolute_import, division, with_statement
 
+import inspect
 import logging
 import optparse
+import os
 
 logging.basicConfig(format='[%(asctime)s '
                     '%(funcName)s:%(lineno)s %(levelname)-5s] '
                     '%(message)s')
+
+# http://stackoverflow.com/questions/714063/python-importing-modules-from-parent-folder
+CURRENT_DIR = os.path.dirname(
+    os.path.abspath(inspect.getfile(inspect.currentframe())))
 
 SOWPODS_FN = 'sowpods.txt'
 WORDS_FN = 'twl06.txt'
@@ -45,9 +51,9 @@ def main():
         test()
     else:
         if opts.sowpods:
-            words = Words(SOWPODS_FN)
+            words = Words(os.path.join(CURRENT_DIR, SOWPODS_FN))
         else:
-            words = Words(WORDS_FN)
+            words = Words(os.path.join(CURRENT_DIR, WORDS_FN))
         tiles = sorted(Tile.from_str(a) for a in args)
         for data in Wordiest.find_two_best(words, tiles, opts.topn):
             print data
