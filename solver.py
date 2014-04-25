@@ -490,6 +490,11 @@ class Wordiest(object):
         best = cls.find_best(words, tiles, topn)
         for (score, data) in best:
             (word, remaining) = data
+            # This is a bit inefficient because we end up calling
+            # cls.subset twice on the full word list.  Since
+            # "remaining" is a subset of "tiles", if we saved the
+            # output of the first call to cls.subset, we could make
+            # the second call a lot faster
             next_best = cls.find_best(words, remaining, topn=2)
             for (next_score, next_data) in next_best:
                 (next_word, next_remaining) = next_data
