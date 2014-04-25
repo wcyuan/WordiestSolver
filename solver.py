@@ -88,6 +88,10 @@ def main():
         for data in Wordiest.find_two_best(words, tiles, opts.topn):
             print data
     if opts.spin:
+        # When we run on Windows using PortablePython, the window
+        # closes as soon as the script is done executing.  So, use the
+        # --spin option so that after it runs, the script will hang so
+        # we can read the output before closing the window
         print "Control-C to exit"
         while True:
             pass
@@ -494,12 +498,21 @@ class Wordiest(object):
 # --------------------------------------------------------------------------- #
 
 def test():
+    """
+    Runs all the doctests in this module
+    """
     import doctest
     doctest.testmod(verbose=True)
 
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
+    """
+    When we run on Windows using PortablePython, if there is an
+    exception, it will close the window and we won't see the error.
+    Instead, catch exceptions, print the stack trace, and spin forever
+    so we can read the error.
+    """
     try:
         main()
     except Exception as e:
