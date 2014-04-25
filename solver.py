@@ -115,6 +115,9 @@ class Words(object):
     Words holds the word list.  For each word it reads, it sorts the
     letters and stores the words based on that key, so it's easy to
     find anagrams.
+
+    Of course, a Trie would be better, but it's a bit of a hassle to
+    implement and this is good enough.
     """
     def __init__(self, filename=WORDS_FN):
         self._data = None
