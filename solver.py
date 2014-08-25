@@ -24,7 +24,7 @@ $ solver.py m i s2l o3w g3w y n t r2l a4l e n e n
 (198, ['agrimony'], ['sennet'], '')
 (197, ['agrimony'], ['nenes'], 't')
 
-(takes about 13s on my machine)
+(Takes about 14s on my machine.  The Trie version takes about 7 seconds)
 
 $ solver.py o2l d4w a e m e3w o2l e i k h f e2l g
 (237, ['geekdom'], ['foh'], 'aeei')
@@ -48,7 +48,7 @@ $ solver.py o2l d4w a e m e3w o2l e i k h f e2l g
 (168, ['hoked'], ['fogie'], 'maee')
 (168, ['hoked'], ['omega'], 'feei')
 
-(takes about 21s on my machine)
+(Takes about 22s on my machine.  The Trie version takes about 8 seconds)
 
 """
 
@@ -80,10 +80,9 @@ def main():
     if opts.test:
         test()
     else:
-        if opts.sowpods:
-            words = Words(os.path.join(CURRENT_DIR, SOWPODS_FN))
-        else:
-            words = Words(os.path.join(CURRENT_DIR, WORDS_FN))
+        fn = SOWPODS_FN if opts.sowpods else WORDS_FN
+        words = Words(os.path.join(CURRENT_DIR, fn),
+                      use_trie=opts.trie)
         tiles = sorted(Tile.from_str(a) for a in args)
         for data in Wordiest.find_two_best(words, tiles, opts.topn):
             print data
@@ -102,6 +101,7 @@ def getopts():
     parser.add_option('--spin',  action='store_true')
     parser.add_option('--sowpods',  action='store_true')
     parser.add_option('--test',  action='store_true')
+    parser.add_option('--trie',  action='store_true')
     parser.add_option('-n', '--topn',  type=int, default=DEFAULT_TOPN)
     (opts, args) = parser.parse_args()
     if opts.verbose:
@@ -110,22 +110,217 @@ def getopts():
 
 # --------------------------------------------------------------------------- #
 
+class Trie(object):
+    """
+    A Trie is a tree-like structure for storing strings, usually,
+    though it can be used to store many things.  The value to be
+    stored usually determines where it should be stored in the tree.
+
+    Usually, the Trie stores strings.  Each node of the tree has edges
+    corresponding to each letter.  The value is the path through the
+    tree that you take to determine which node stores the value.
+    """
+    def __init__(self, values=None):
+        """
+        Create a new Trie.  If we are seeded with some values, insert those.
+        """
+        self.children = {}
+        self.value = None
+        if values is not None:
+            for value in values:
+                self.insert(value)
+
+    @classmethod
+    def _value_to_path(cls, value):
+        """
+        Where should we store a particular value (if the user doesn't
+        insert us with a particular path).  We just treat the value as
+        an iterable, if possible.  Otherwise, we convert it to a string.
+
+        >>> Trie._value_to_path('abc')
+        'abc'
+        >>> Trie._value_to_path(3)
+        '3'
+        """
+        try:
+            iter(value)
+            return value
+        except TypeError:
+            return str(value)
+
+    def insert(self, value, path=None):
+        """
+        Insert a value.
+        """
+        if path is None:
+            path = self._value_to_path(value)
+        if not path:
+            self.value = value
+            return self
+        else:
+            if path[0] not in self.children:
+                self.children[path[0]] = Trie()
+            self.children[path[0]].insert(value, path[1:])
+            return self
+
+    def subtrie(self, path, create=False):
+        """
+        Given a path, return the subtrie rooted at the end of that path.
+        If the subtrie doesn't exist in the trie, return None.  If
+        create is true, then it will create the path if necessary.
+
+        >>> print str(Trie(['agb', 'agbas', 'basd', 'agbsdfa']).subtrie('agb', create=False))
+        agb
+         a : None
+          s : agbas
+         s : None
+          d : None
+           f : None
+            a : agbsdfa
+        """
+        if not path:
+            return self
+        if path[0] not in self.children:
+            if not create:
+                return None
+            self.children[path[0]] = Trie()
+        return self.children[path[0]].subtrie(path[1:], create=create)
+
+    def setdefault(self, path, default):
+        """
+        Get the value at the end of a particular path.  If there is no
+        value there, set it to the given default
+
+        >>> t = Trie(['agb', 'agbas', 'basd'])
+        >>> t.setdefault('foo', []).append('bar')
+        >>> t.setdefault('foo', []).append('baz')
+        >>> t.get('foo')
+        ['bar', 'baz']
+        """
+        subtrie = self.subtrie(self._value_to_path(path), create=True)
+        if subtrie.value is None:
+            subtrie.value = default
+        return subtrie.value
+
+    def get(self, path, default=None):
+        """
+        Get the value at the end of a particular path.  If there is no
+        value there, return None.
+
+        >>> t = Trie(['agb', 'agbas', 'basd'])
+        >>> t.get('agb')
+        'agb'
+        >>> t.get('foo')
+
+        >>> t.get('foo', 'bar')
+        'bar'
+        """
+        subtrie = self.subtrie(self._value_to_path(path), create=False)
+        return default if subtrie is None else subtrie.value
+
+    def to_string(self, depth=0):
+        """
+        Return a string representation of a Trie.
+        >>> print str(Trie(['agb', 'agbas', 'basd']))
+        None
+         a : None
+          g : None
+           b : agb
+            a : None
+             s : agbas
+         b : None
+          a : None
+           s : None
+            d : basd
+        """
+        retval = str(self.value)
+        for sub in self.children:
+            retval += '\n{0}{1} : {2}'.format(
+                ' ' * (depth+1), # indent
+                sub,
+                self.children[sub].to_string(depth+1))
+        return retval
+
+    def __iter__(self):
+        """
+        Iterate through the keys of the Trie, sorted.
+        Converts keys into strings and concatenates them.
+
+        >>> list(Trie(['zasdf', 'agb', 'agbas', 'basd']))
+        ['agb', 'agbas', 'basd', 'zasdf']
+        >>> t = Trie()
+        >>> t.insert(range(3), path='abc')
+        Trie(['abc'])
+        >>> list(t)
+        ['abc']
+        """
+        if self.value is not None:
+            yield ""
+        for sub in sorted(self.children):
+            for key in self.children[sub]:
+                yield str(sub) + str(key)
+
+    def itervalues(self):
+        """
+        Iterate through the values in the Trie, sorted.
+
+        >>> list(Trie(['zasdf', 'agb', 'agbas', 'basd']).itervalues())
+        ['agb', 'agbas', 'basd', 'zasdf']
+        >>> t = Trie()
+        >>> t.insert(range(3), path='abc')
+        Trie(['abc'])
+        >>> list(t.itervalues())
+        [[0, 1, 2]]
+        """
+        if self.value is not None:
+            yield self.value
+        for sub in sorted(self.children):
+            for value in self.children[sub].itervalues():
+                yield value
+
+    def __str__(self):
+        return self.to_string()
+
+    def __repr__(self):
+        """
+        If the Trie has fewer than 6 elements, print a string that will
+        reconstruct the Trie.  Otherwise, print the default repr.
+
+        >>> Trie(['agb', 'agbas', 'basd'])
+        Trie(['agb', 'agbas', 'basd'])
+        >>> Trie(range(3))
+        Trie(['0', '1', '2'])
+        >>> Trie(range(9)) # doctest: +ELLIPSIS
+        <solver.Trie object at ...>
+        """
+        itr = iter(self)
+        nvals = tuple(next(itr) for _ in xrange(6))
+        if len(nvals) < 6:
+            return '{cn}({lst})'.format(cn=self.__class__.__name__,
+                                        lst=list(self))
+        else:
+            return super(Trie, self).__repr__()
+
+# --------------------------------------------------------------------------- #
+
 class Words(object):
     """
-    Words holds the word list.  For each word it reads, it sorts the
-    letters and stores the words based on that key, so it's easy to
-    find anagrams.
+    Words holds the word list in a dictionary.  For each word it
+    reads, it sorts the letters and stores the words based on that
+    key, so it's easy to find anagrams.
 
-    Of course, a Trie would be better, but it's a bit of a hassle to
-    implement and this is good enough.
     """
-    def __init__(self, filename=WORDS_FN):
+    def __init__(self, filename=WORDS_FN, use_trie=False):
         self._data = None
+        self.use_trie = use_trie
         if filename is not None:
             self.read(filename)
 
     def read(self, filename):
-        data = {}
+        if self.use_trie:
+            data = Trie()
+        else:
+            data = {}
         with open(filename) as fd:
             for line in fd:
                 # consume the header
@@ -368,6 +563,9 @@ class TopNQueue(object):
     def __getitem__(self, ii):
         return self.data[ii]
 
+    def __len__(self):
+        return len(self.data)
+
 # --------------------------------------------------------------------------- #
 
 class Wordiest(object):
@@ -424,16 +622,40 @@ class Wordiest(object):
             return (False, [], tiles)
 
     @classmethod
+    def trie_subset(cls, trie, tiles, used=None):
+        if used is None:
+            used = []
+        if trie.value is not None:
+            yield (''.join(sorted(tile.letter for tile in used)),
+                   used, tiles)
+        # If there are repeated letters, we only want to look at the first one.
+        seen_letters = set()
+        for ii in xrange(len(tiles)):
+            if tiles[ii].letter in seen_letters:
+                continue
+            seen_letters.add(tiles[ii].letter)
+            st = trie.subtrie(tiles[ii].letter)
+            if st is None:
+                continue
+            for res in cls.trie_subset(st, tiles[:ii] + tiles[ii+1:],
+                                       used + [tiles[ii]]):
+                yield res
+
+    @classmethod
     def subset(cls, words, tiles):
         """
         Given a list of words and tiles, returns an iterator of all the
         words that can be made with these tiles.  Returns them in the
         order of the wordlist.
         """
-        for word in words:
-            (match, used, remaining) = cls.contains(word, tiles)
-            if match:
-                yield (word, used, remaining)
+        if words.use_trie:
+            for res in cls.trie_subset(words._data, tiles):
+                yield res
+        else:
+            for word in words:
+                (match, used, remaining) = cls.contains(word, tiles)
+                if match:
+                    yield (word, used, remaining)
 
     @classmethod
     def score_word(cls, word, tiles):
@@ -486,6 +708,12 @@ class Wordiest(object):
         Returns an iterator where each element is a tuple:
           (score, list-of-first-words, list-of-second-words,
            string-of-remaining-letters)
+
+
+        The current algorithm is non-optimal.  It finds the best
+        single word, then the best word from the remaining letters.
+        Probably, it's usually the best you can do, but not guaranteed
+        to always be the best.
         """
         best = cls.find_best(words, tiles, topn)
         for (score, data) in best:
@@ -496,6 +724,9 @@ class Wordiest(object):
             # output of the first call to cls.subset, we could make
             # the second call a lot faster
             next_best = cls.find_best(words, remaining, topn=2)
+            if len(next_best) == 0:
+                yield (score, words.get_words(word), [],
+                       ''.join(r.letter for r in remaining))
             for (next_score, next_data) in next_best:
                 (next_word, next_remaining) = next_data
                 yield (score+next_score,
