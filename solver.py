@@ -120,26 +120,30 @@ class Trie(object):
     corresponding to each letter.  The value is the path through the
     tree that you take to determine which node stores the value.
     """
-    def __init__(self, values=None):
+    def __init__(self, values=None, value_to_path=None):
         """
         Create a new Trie.  If we are seeded with some values, insert those.
         """
         self.children = {}
         self.value = None
+        if value_to_path is None:
+            self.value_to_path_func = self._default_value_to_path
+        else:
+            self.value_to_path_func = value_to_path
         if values is not None:
             for value in values:
                 self.insert(value)
 
     @classmethod
-    def _value_to_path(cls, value):
+    def _default_value_to_path(cls, value):
         """
         Where should we store a particular value (if the user doesn't
         insert us with a particular path).  We just treat the value as
         an iterable, if possible.  Otherwise, we convert it to a string.
 
-        >>> Trie._value_to_path('abc')
+        >>> Trie._default_value_to_path('abc')
         'abc'
-        >>> Trie._value_to_path(3)
+        >>> Trie._default_value_to_path(3)
         '3'
         """
         try:
@@ -153,7 +157,7 @@ class Trie(object):
         Insert a value.
         """
         if path is None:
-            path = self._value_to_path(value)
+            path = self.value_to_path_func(value)
         if not path:
             self.value = value
             return self
@@ -197,7 +201,7 @@ class Trie(object):
         >>> t.get('foo')
         ['bar', 'baz']
         """
-        subtrie = self.subtrie(self._value_to_path(path), create=True)
+        subtrie = self.subtrie(self.value_to_path_func(path), create=True)
         if subtrie.value is None:
             subtrie.value = default
         return subtrie.value
@@ -215,7 +219,7 @@ class Trie(object):
         >>> t.get('foo', 'bar')
         'bar'
         """
-        subtrie = self.subtrie(self._value_to_path(path), create=False)
+        subtrie = self.subtrie(self.value_to_path_func(path), create=False)
         return default if subtrie is None else subtrie.value
 
     def to_string(self, depth=0):
